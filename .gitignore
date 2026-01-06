@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -137,3 +138,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+=======
+node_modules/
+.env
+*.log
+.DS_Store
+>>>>>>> b21b387 (Implement ENS CCIP-Read gateway with health and resolve endpoints)
