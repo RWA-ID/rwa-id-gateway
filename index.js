@@ -158,8 +158,13 @@ app.get('/:sender/:data.json', async (req, res) => {
   }
 });
 
+app.get('/signer', (req, res) => {
+  res.json({ signerAddress: signer.address });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`RWA-ID Gateway running on port ${PORT}`);
   console.log(`Registry: ${RWA_ID_REGISTRY}`);
   console.log(`RPC URL: ${LINEA_RPC_URL}`);
+  console.log(`Signer Address: ${signer.address}`);
 });
