@@ -16,6 +16,7 @@ if (!LINEA_RPC_URL || !RWA_ID_REGISTRY || !GATEWAY_SIGNER_PRIVATE_KEY) {
 
 const provider = new ethers.JsonRpcProvider(LINEA_RPC_URL);
 const signer = new ethers.Wallet(GATEWAY_SIGNER_PRIVATE_KEY);
+console.log("GATEWAY SIGNER ADDRESS:", signer.address);
 
 const REGISTRY_ABI = [
   'function projectIdBySlugHash(bytes32) view returns (uint256)',
