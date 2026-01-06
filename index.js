@@ -104,7 +104,10 @@ app.get('/resolve', async (req, res) => {
       return res.status(result.status).json({ error: result.error });
     }
 
-    res.json(result);
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.send(JSON.stringify(result));
   } catch (error) {
     console.error('Resolve error:', error);
     res.status(500).json({ error: error.message });
@@ -158,7 +161,10 @@ app.get('/:sender/:data.json', async (req, res) => {
       [node, addr, messageHash, signature]
     );
 
-    res.json({ data: encoded });
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.send(JSON.stringify({ data: encoded, signer: signer.address }));
   } catch (error) {
     console.error('CCIP-Read error:', error);
     res.status(500).json({ error: error.message });
