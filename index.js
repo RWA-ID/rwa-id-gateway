@@ -5,9 +5,9 @@ const { ethers } = require('ethers');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const LINEA_RPC_URL = process.env.LINEA_RPC_URL;
-const RWA_ID_REGISTRY = process.env.RWA_ID_REGISTRY;
-const GATEWAY_SIGNER_PRIVATE_KEY = process.env.GATEWAY_SIGNER_PRIVATE_KEY;
+const LINEA_RPC_URL = (process.env.LINEA_RPC_URL || '').trim();
+const RWA_ID_REGISTRY = (process.env.RWA_ID_REGISTRY || '').trim();
+const GATEWAY_SIGNER_PRIVATE_KEY = (process.env.GATEWAY_SIGNER_PRIVATE_KEY || '').trim();
 
 if (!LINEA_RPC_URL || !RWA_ID_REGISTRY || !GATEWAY_SIGNER_PRIVATE_KEY) {
   console.error('Missing required environment variables');
@@ -44,7 +44,7 @@ async function resolveName(fullName) {
   const parts = fullName.trim().toLowerCase().split('.');
   
   if (parts.length < 3 || parts[parts.length - 2] !== 'rwa-id' || parts[parts.length - 1] !== 'eth') {
-    throw new Error('Invalid name: must end with .rwa-id.eth');
+    return { error: 'Invalid name: must end with .rwa-id.eth', status: 400 };
   }
 
   const label = parts[0];
@@ -67,7 +67,8 @@ async function resolveName(fullName) {
     [RWA_ID_REGISTRY, node, addr]
   );
 
-  const signature = await signer.signMessage(ethers.getBytes(messageHash));
+  const sig = signer.signingKey.sign(messageHash);
+  const signature = ethers.concat([sig.r, sig.s, ethers.toBeHex(sig.v, 1)]);
 
   return {
     name: fullName,
@@ -142,7 +143,8 @@ app.get('/:sender/:data.json', async (req, res) => {
       [RWA_ID_REGISTRY, node, addr]
     );
 
-    const signature = await signer.signMessage(ethers.getBytes(messageHash));
+    const sig = signer.signingKey.sign(messageHash);
+    const signature = ethers.concat([sig.r, sig.s, ethers.toBeHex(sig.v, 1)]);
 
     const encoded = abiCoder.encode(
       ['bytes32', 'address', 'bytes32', 'bytes'],
