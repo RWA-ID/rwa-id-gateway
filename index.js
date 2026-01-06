@@ -74,8 +74,7 @@ async function resolveName(fullName) {
     [RWA_ID_REGISTRY, node, addr]
   );
 
-  const sig = signer.signingKey.sign(messageHash);
-  const signature = ethers.concat([sig.r, sig.s, ethers.toBeHex(sig.v, 1)]);
+  const signature = signer.signingKey.sign(messageHash).serialized;
 
   return {
     name: fullName,
@@ -153,8 +152,7 @@ app.get('/:sender/:data.json', async (req, res) => {
       [RWA_ID_REGISTRY, node, addr]
     );
 
-    const sig = signer.signingKey.sign(messageHash);
-    const signature = ethers.concat([sig.r, sig.s, ethers.toBeHex(sig.v, 1)]);
+    const signature = signer.signingKey.sign(messageHash).serialized;
 
     const encoded = abiCoder.encode(
       ['bytes32', 'address', 'bytes32', 'bytes'],
