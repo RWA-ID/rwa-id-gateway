@@ -3,21 +3,22 @@ require("dotenv").config();
 const express = require("express");
 const { ethers } = require("ethers");
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 5000;
 
-// Required env vars
-const LINEA_RPC_URL = process.env.LINEA_RPC_URL;
-const REGISTRY = process.env.RWA_ID_REGISTRY;
+// Required env vars (trim whitespace)
+const LINEA_RPC_URL = (process.env.LINEA_RPC_URL || '').trim();
+const REGISTRY = (process.env.RWA_ID_REGISTRY || '').trim();
 
 if (!LINEA_RPC_URL) throw new Error("Missing LINEA_RPC_URL");
 if (!REGISTRY) throw new Error("Missing RWA_ID_REGISTRY");
 
 const provider = new ethers.JsonRpcProvider(LINEA_RPC_URL);
-const GATEWAY_SIGNER_PRIVATE_KEY = process.env.GATEWAY_SIGNER_PRIVATE_KEY;
+const GATEWAY_SIGNER_PRIVATE_KEY = (process.env.GATEWAY_SIGNER_PRIVATE_KEY || '').trim();
 if (!GATEWAY_SIGNER_PRIVATE_KEY) throw new Error("Missing GATEWAY_SIGNER_PRIVATE_KEY");
 
 const signer = new ethers.Wallet(GATEWAY_SIGNER_PRIVATE_KEY);
-const SIGNER_ADDRESS = signer.address; // sanity
+const SIGNER_ADDRESS = signer.address;
+console.log("GATEWAY SIGNER ADDRESS:", SIGNER_ADDRESS);
 
 const REGISTRY_ABI = [
   "function projectIdBySlugHash(bytes32) view returns (uint256)",
@@ -47,8 +48,19 @@ function parseName(name) {
 
 const app = express();
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, registry: REGISTRY });
+app.get("/health", async (_req, res) => {
+  try {
+    const network = await provider.getNetwork();
+    res.json({
+      ok: true,
+      chainId: network.chainId.toString(),
+      rpc: LINEA_RPC_URL,
+      registry: REGISTRY,
+      signer: SIGNER_ADDRESS
+    });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // MVP read endpoint (no signing yet)
@@ -73,7 +85,7 @@ app.get("/resolve", async (req, res) => {
       [REGISTRY, node, addr]
     );
 
-    const signature = await signer.signMessage(ethers.getBytes(messageHash));
+    const signature = signer.signingKey.sign(messageHash).serialized;
 
     res.json({
       name: `${label}.${slug}.rwa-id.eth`,
@@ -112,7 +124,7 @@ app.get("/ccip", async (req, res) => {
       [REGISTRY, node, addr]
     );
 
-    const signature = await signer.signMessage(ethers.getBytes(messageHash));
+    const signature = signer.signingKey.sign(messageHash).serialized;
 
     // ABI encode (bytes32 node, address resolved, bytes32 messageHash, bytes signature)
     const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -179,7 +191,7 @@ app.get("/:sender/:data.json", async (req, res) => {
       [REGISTRY, node, addr]
     );
 
-    const signature = await signer.signMessage(ethers.getBytes(messageHash));
+    const signature = signer.signingKey.sign(messageHash).serialized;
 
     const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
       ["bytes32", "address", "bytes32", "bytes"],
@@ -187,8 +199,10 @@ app.get("/:sender/:data.json", async (req, res) => {
     );
 
     res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
     // ENS clients accept JSON: { data: "0x..." }
-    res.send(JSON.stringify({ data: encoded }));
+    res.send(JSON.stringify({ data: encoded, signer: SIGNER_ADDRESS }));
   } catch (e) {
     res.status(500).send(e.message || String(e));
   }

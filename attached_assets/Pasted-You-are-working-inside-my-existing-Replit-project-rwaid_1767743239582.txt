@@ -1,0 +1,63 @@
+You are working inside my existing Replit project “rwaid-gatewayzip--nftworldeth”.
+
+GOAL:
+Make sure the deployed (published) app runs the gateway code from the /rwaid-gateway folder, and that signatures are produced WITHOUT the Ethereum Signed Message prefix (raw digest signature) so my mainnet wildcard resolver verifies correctly.
+
+IMPORTANT CONTEXT:
+- This Replit project currently has TWO index.js files: one at the project root and one inside /rwaid-gateway/index.js.
+- The correct gateway server code is inside /rwaid-gateway/index.js.
+- The gateway must expose:
+  - GET /health -> returns JSON including ok, chainId, rpc, registry, signer
+  - GET /resolve?name=label.slug.rwa-id.eth -> returns JSON including messageHash + signature
+  - GET /:sender/:data.json -> returns JSON { data: "0x..." } where data is ABI-encoded (bytes32 node, address resolved, bytes32 messageHash, bytes signature)
+- Environment variables used:
+  - LINEA_RPC_URL
+  - RWA_ID_REGISTRY
+  - GATEWAY_SIGNER_PRIVATE_KEY
+  - PORT (optional)
+
+TASKS (DO THEM IN THIS ORDER):
+
+1) Ensure the Replit run command executes the folder gateway:
+   - Edit the .replit file (or whatever Replit uses for run config) so running the repl does:
+     cd rwaid-gateway && npm install && node index.js
+   - Do NOT run the root index.js. If needed, ignore it.
+
+2) In /rwaid-gateway/index.js, change all signature generation to RAW digest signing (NO prefix):
+   Replace any code that does:
+     await signer.signMessage(ethers.getBytes(messageHash))
+   with:
+     signer.signingKey.sign(messageHash).serialized
+   Do this anywhere it appears (likely 2–3 places).
+
+3) Upgrade /health endpoint to include network + signer details:
+   - /health must return:
+     {
+       ok: true,
+       chainId: "<string>",
+       rpc: "<LINEA_RPC_URL>",
+       registry: "<RWA_ID_REGISTRY>",
+       signer: "<address derived from GATEWAY_SIGNER_PRIVATE_KEY>"
+     }
+   - chainId must come from provider.getNetwork().
+
+4) Verify dependencies for the folder app:
+   - Ensure /rwaid-gateway/package.json has dependencies: express, ethers, dotenv
+   - If dotenv is missing, add it.
+   - Keep it simple; no TypeScript.
+
+5) After changes:
+   - Restart the repl.
+   - In the console, print startup logs:
+     “rwaid-gateway listening on :<PORT>”
+     and print LINEA_RPC_URL + RWA_ID_REGISTRY.
+   - Then run a quick internal self-check in the console by requesting:
+     /health
+   Confirm the signer shown matches the private key’s address (expected: 0xC9fACcf3a77b553375017efFEe441D9770fAA723).
+
+6) Publish/Republish the app and give me the final stable URL.
+
+Output format:
+- Briefly list exactly what files you changed and what you changed.
+- Then show the exact run command configuration you set.
+- Then show the /health JSON response after restart.
