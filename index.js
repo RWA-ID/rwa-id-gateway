@@ -5,6 +5,12 @@ const { ethers } = require('ethers');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  next();
+});
+
 const LINEA_RPC_URL = (process.env.LINEA_RPC_URL || '').trim();
 const RWA_ID_REGISTRY = (process.env.RWA_ID_REGISTRY || '').trim();
 const GATEWAY_SIGNER_PRIVATE_KEY = (process.env.GATEWAY_SIGNER_PRIVATE_KEY || '').trim();
