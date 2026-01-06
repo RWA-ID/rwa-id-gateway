@@ -83,7 +83,7 @@ async function resolveName(fullName) {
 }
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, registry: RWA_ID_REGISTRY });
+  res.json({ ok: true, registry: RWA_ID_REGISTRY, signer: signer.address });
 });
 
 app.get('/resolve', async (req, res) => {
