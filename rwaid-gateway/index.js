@@ -48,6 +48,17 @@ function parseName(name) {
 
 const app = express();
 
+// CORS middleware - must be before all routes
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.get("/health", async (_req, res) => {
   try {
     const network = await provider.getNetwork();
