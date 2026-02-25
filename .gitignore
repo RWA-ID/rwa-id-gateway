@@ -144,3 +144,4 @@ node_modules/
 *.log
 .DS_Store
 >>>>>>> b21b387 (Implement ENS CCIP-Read gateway with health and resolve endpoints)
+attached_assets/
