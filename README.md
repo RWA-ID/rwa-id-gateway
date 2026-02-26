@@ -81,7 +81,7 @@ GET /{sender}/{calldata}.json
 
 **Live Gateway URL:**
 ```
-https://rwaid-gatewayzip--nftworldeth.replit.app/{sender}/{data}.json
+https://gateway.rwa-id.com/{sender}/{data}.json
 ```
 
 ---
