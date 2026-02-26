@@ -4,43 +4,42 @@
 
 [![Website](https://img.shields.io/badge/Website-rwa--id.com-00BCD4?style=flat-square)](https://rwa-id.com)
 [![Standard](https://img.shields.io/badge/Standard-EIP--3668-00BCD4?style=flat-square)](https://eips.ethereum.org/EIPS/eip-3668)
-[![Network](https://img.shields.io/badge/Network-Linea%20Mainnet-success?style=flat-square)](https://linea.build/)
+[![Network](https://img.shields.io/badge/Network-Ethereum%20Mainnet-success?style=flat-square)](https://ethereum.org/)
 [![Status](https://img.shields.io/badge/Status-Live-success?style=flat-square)](https://rwa-id.com)
 
-The **RWA ID Gateway** is the off-chain CCIP-Read server that powers identity resolution for all `*.rwa-id.eth` subdomains. It implements [EIP-3668](https://eips.ethereum.org/EIPS/eip-3668) to enable gas-efficient, verifiable off-chain lookups with on-chain Merkle proof verification.
+The **RWA ID Gateway** is the off-chain CCIP-Read server that powers identity resolution for all `*.rwa-id.eth` subdomains. It implements [EIP-3668](https://eips.ethereum.org/EIPS/eip-3668) to enable gas-efficient, verifiable off-chain lookups backed by on-chain signature verification.
 
 ---
 
 ## 🔍 What Is This?
 
-When a wallet resolves a name like `alice.securitize.rwa-id.eth`, the on-chain ENS Wildcard Resolver triggers a CCIP-Read callback to this gateway. The gateway responds with a signed payload containing the resolved address and a Merkle proof — which the resolver then verifies on-chain.
+When a wallet resolves a name like `joe.test.rwa-id.eth`, the on-chain ENS Wildcard Resolver triggers a CCIP-Read callback to this gateway. The gateway looks up the identity on-chain, signs a response payload, and returns it — the resolver then verifies the signature on-chain.
 
 ```
-Wallet resolves: alice.securitize.rwa-id.eth
+Wallet resolves: joe.test.rwa-id.eth
         ↓
-ENS Registry → Wildcard Resolver (0x188a...c80)
+ENS Registry → Wildcard Resolver (0x765FB675AC33a85ccb455d4cb0b5Fb1f2D345eb1)
         ↓ CCIP-Read (EIP-3668)
 rwa-id-gateway (this repo)
-        ↓ Returns: signed payload + Merkle proof
-Resolver verifies on-chain
+        ↓ Returns: signed (node, address, messageHash, sig)
+resolveWithProof() verifies signature on-chain
         ↓
-Wallet displays: ✓ alice.securitize.rwa-id.eth
+Wallet displays: ✓ joe.test.rwa-id.eth
 ```
 
 ---
 
 ## 🏗️ Architecture
 
-The gateway sits between the on-chain resolver and off-chain identity data:
-
 ```
 ┌─────────────────────────────────────────────┐
-│              On-Chain (Linea)               │
+│           On-Chain (Ethereum Mainnet)        │
 │                                             │
-│  ENS Wildcard Resolver (0x188a...c80)       │
+│  ENS Wildcard Resolver                      │
+│  0x765FB675AC33a85ccb455d4cb0b5Fb1f2D345eb1 │
 │  ┌─────────────────────────────────────┐    │
 │  │  resolve() → OffchainLookup revert  │    │
-│  │  callback() → verify Merkle proof   │    │
+│  │  resolveWithProof() → verify sig    │    │
 │  └─────────────────────────────────────┘    │
 └──────────────────┬──────────────────────────┘
                    │ EIP-3668 CCIP-Read
@@ -50,19 +49,19 @@ The gateway sits between the on-chain resolver and off-chain identity data:
 │                                             │
 │  GET /{sender}/{calldata}.json              │
 │  ┌─────────────────────────────────────┐    │
-│  │  1. Decode ENS calldata             │    │
-│  │  2. Lookup platform + client data   │    │
-│  │  3. Generate Merkle proof           │    │
-│  │  4. Sign response payload           │    │
-│  │  5. Return ABI-encoded result       │    │
+│  │  1. Decode DNS-encoded name         │    │
+│  │  2. Call projectIdBySlugHash()      │    │
+│  │  3. Call nameNodeFromHash()         │    │
+│  │  4. Call resolveAddr(node)          │    │
+│  │  5. Sign response payload           │    │
+│  │  6. Return ABI-encoded result       │    │
 │  └─────────────────────────────────────┘    │
 └──────────────────┬──────────────────────────┘
                    │
 ┌─────────────────────────────────────────────┐
-│        RWA ID Core Contract (Linea)         │
-│  0x74aaCeff8139c84433befB922a8E687B6ba51F3a │
-│  (Merkle roots, platform namespaces,        │
-│   claimed identities)                       │
+│     RWAIDv2 Core Contract (Ethereum)        │
+│  0xD0B565C7134bDB16Fc3b8A9Cb5fdA003C37930c2 │
+│  (namespaces, identity NFTs, resolveAddr)   │
 └─────────────────────────────────────────────┘
 ```
 
@@ -74,14 +73,19 @@ The gateway sits between the on-chain resolver and off-chain identity data:
 GET /{sender}/{calldata}.json
 ```
 
-| Parameter | Description |
-|-----------|-------------|
-| `sender`  | Address of the ENS resolver contract making the request |
-| `calldata`| ABI-encoded calldata from the `OffchainLookup` revert |
+| Parameter  | Description |
+|------------|-------------|
+| `sender`   | Address of the ENS resolver contract (lowercase hex, no `0x` prefix) |
+| `calldata` | Hex-encoded `abi.encode(bytes dnsName, bytes addrCalldata)` from `OffchainLookup` (no `0x` prefix) |
 
 **Live Gateway URL:**
 ```
 https://gateway.rwa-id.com/{sender}/{data}.json
+```
+
+**Response:**
+```json
+{ "data": "0x<abi.encode(bytes32 node, address resolved, bytes32 messageHash, bytes sig)>" }
 ```
 
 ---
@@ -91,8 +95,8 @@ https://gateway.rwa-id.com/{sender}/{data}.json
 ### Prerequisites
 
 - Node.js v18+
-- npm or yarn
-- Access to a Linea RPC endpoint
+- npm
+- Ethereum mainnet RPC endpoint (Infura, Alchemy, etc.)
 
 ### Installation
 
@@ -100,101 +104,58 @@ https://gateway.rwa-id.com/{sender}/{data}.json
 git clone https://github.com/RWA-ID/rwa-id-gateway.git
 cd rwa-id-gateway
 npm install
+cp .env.example .env   # fill in your keys
 ```
 
 ### Configuration
 
-Create a `.env` file in the project root:
-
 ```env
-# Required
-PRIVATE_KEY=0x...          # Signer private key (must match resolver's trusted signer)
-RPC_URL=https://...        # Linea mainnet RPC (e.g., Infura, Alchemy)
-PORT=3000                  # Gateway port (default: 3000)
-
-# Contract Addresses (Linea Mainnet)
-CORE_CONTRACT=0x74aaCeff8139c84433befB922a8E687B6ba51F3a
-RESOLVER_CONTRACT=0x188a60a8bC5Df96CD12C64FBAf166075a5029c80
+ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_KEY
+GATEWAY_SIGNER_PRIVATE_KEY=your_private_key_here
+RWA_ID_REGISTRY=0xD0B565C7134bDB16Fc3b8A9Cb5fdA003C37930c2
+PORT=5000
 ```
 
-### Run the Gateway
+> The `GATEWAY_SIGNER_PRIVATE_KEY` must correspond to the `trustedSigner` address registered in the on-chain resolver. Any response signed by a different key will be rejected.
+
+### Run
 
 ```bash
-# Development
 node index.js
-
-# Production (with pm2)
-pm2 start index.js --name rwa-id-gateway
 ```
 
 ---
 
 ## 🔄 Resolution Flow (Detailed)
 
-1. **Wallet queries ENS** for `alice.securitize.rwa-id.eth`
-2. **ENS Registry** routes to the RWA ID Wildcard Resolver (`0x188a...c80`)
-3. **Resolver reverts** with `OffchainLookup(gateway_url, sender, calldata, callback_selector, extra_data)`
+1. **Wallet queries ENS** for `joe.test.rwa-id.eth`
+2. **ENS Registry** routes to the RWA ID Wildcard Resolver (`0x765F...eb1`)
+3. **Resolver reverts** with `OffchainLookup(gateway_url, sender, calldata, resolveWithProof, extraData)`
 4. **Wallet calls gateway** at `GET /{sender}/{calldata}.json`
-5. **Gateway decodes** the calldata to extract the subdomain being resolved
-6. **Gateway queries** the RWA ID Core Contract for the platform's Merkle root and the client's address
-7. **Gateway generates** a Merkle proof for the client's entry
-8. **Gateway signs** the response with its private key
-9. **Gateway returns** ABI-encoded `(address resolvedAddress, bytes memory proof, bytes memory sig)`
-10. **Wallet calls** the resolver's `callback()` function with the gateway response
-11. **Resolver verifies** the Merkle proof and signature on-chain
-12. **Wallet displays** the resolved address ✓
+5. **Gateway decodes** the DNS-encoded name from calldata
+6. **Gateway calls** `projectIdBySlugHash(slugHash)` → project ID
+7. **Gateway calls** `nameNodeFromHash(projectId, nameHash)` → ENS node
+8. **Gateway calls** `resolveAddr(node)` → resolved address (owner of the identity NFT)
+9. **Gateway signs** `keccak256(abi.encodePacked(registry, node, address))` with the trusted signer key
+10. **Gateway returns** `{ data: abi.encode(node, address, messageHash, sig) }`
+11. **Wallet calls** `resolveWithProof(response, extraData)` on the resolver
+12. **Resolver verifies** the signature against `trustedSigner` on-chain
+13. **Wallet displays** the resolved address ✓
 
 ---
 
-## 📁 Project Structure
+## 📋 Deployed Contracts (Ethereum Mainnet)
 
-```
-rwa-id-gateway/
-├── index.js              # Main gateway server + request handler
-├── rwaid-gateway/        # Core gateway logic
-│   ├── resolver.js       # ENS calldata decoding + response encoding
-│   ├── merkle.js         # Merkle proof generation
-│   └── signer.js         # Response signing
-├── package.json
-├── .gitignore
-└── README.md
-```
-
----
-
-## 📦 Key Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `ethers` | ABI encoding/decoding, signing, contract calls |
-| `express` | HTTP server for CCIP-Read endpoint |
-| `@ensdomains/ens-contracts` | ENS ABI and utilities |
-| `merkletreejs` | Merkle tree generation and proof creation |
-
----
-
-## 🔗 Related Repositories
-
-| Repo | Description |
-|------|-------------|
-| [RWA-ID/RWA-ID](https://github.com/RWA-ID/RWA-ID) | Core smart contracts, whitepaper, and documentation |
-| [RWA-ID/rwa-id-frontend](https://github.com/RWA-ID/rwa-id-frontend) | Platform dashboard and client claim portal |
-| **rwa-id-gateway** (this repo) | EIP-3668 CCIP-Read gateway |
-
----
-
-## 📋 Deployed Contracts (Linea Mainnet)
-
-| Contract | Address | Purpose |
-|----------|---------|---------|
-| **Core Contract** | [`0x74aaCeff8139c84433befB922a8E687B6ba51F3a`](https://lineascan.build/address/0x74aaCeff8139c84433befB922a8E687B6ba51F3a) | Project namespaces, Merkle roots, identity claims |
-| **ENS Wildcard Resolver** | [`0x188a60a8bC5Df96CD12C64FBAf166075a5029c80`](https://lineascan.build/address/0x188a60a8bC5Df96CD12C64FBAf166075a5029c80) | EIP-3668 CCIP-Read resolver |
+| Contract | Address |
+|----------|---------|
+| **RWAIDv2** | [`0xD0B565C7134bDB16Fc3b8A9Cb5fdA003C37930c2`](https://etherscan.io/address/0xD0B565C7134bDB16Fc3b8A9Cb5fdA003C37930c2) |
+| **ENS Wildcard Resolver v2** | [`0x765FB675AC33a85ccb455d4cb0b5Fb1f2D345eb1`](https://etherscan.io/address/0x765FB675AC33a85ccb455d4cb0b5Fb1f2D345eb1) |
 
 ---
 
 ## 🧪 Testing Resolution
 
-You can verify the gateway is working by resolving the live test identity in any ENS-compatible wallet:
+Verify the gateway is working by resolving this live identity in any ENS-compatible wallet:
 
 ```
 joe.test.rwa-id.eth
@@ -202,14 +163,41 @@ joe.test.rwa-id.eth
 
 Supported wallets: MetaMask, Trust Wallet, Rainbow, Uniswap Wallet, and any ENS-compatible wallet.
 
+Or test the endpoint directly:
+
+```bash
+curl https://gateway.rwa-id.com/health
+```
+
 ---
 
-## 🔒 Security Considerations
+## 📁 Project Structure
 
-- The gateway **signs all responses** with a private key. The corresponding public key is registered in the on-chain resolver — any tampered response will fail on-chain verification.
-- The gateway is **stateless** — it reads data from the on-chain Core Contract and never stores identity data locally.
-- **Merkle proofs** ensure clients can only claim identities that were committed to the on-chain root by the platform.
-- Never expose your `PRIVATE_KEY` — this is the signer key, not a wallet with funds, but it must be kept secret to prevent spoofed responses.
+```
+rwa-id-gateway/
+├── index.js        # Gateway server — CCIP-Read endpoint + resolution logic
+├── package.json
+├── .env.example
+└── README.md
+```
+
+---
+
+## 🔒 Security
+
+- The gateway **signs all responses** with a private key. The corresponding address is set as `trustedSigner` in the on-chain resolver — any tampered response will fail signature verification.
+- The gateway is **stateless** — it reads live data from the RWAIDv2 contract and stores nothing locally.
+- Never expose your `GATEWAY_SIGNER_PRIVATE_KEY`. It does not hold funds but must be kept secret to prevent spoofed resolution responses.
+
+---
+
+## 🔗 Related Repositories
+
+| Repo | Description |
+|------|-------------|
+| [RWA-ID/RWA-ID](https://github.com/RWA-ID/RWA-ID) | Core smart contracts, scripts, and documentation |
+| [RWA-ID/rwa-id-frontend](https://github.com/RWA-ID/rwa-id-frontend) | Platform console and client claim portal |
+| **rwa-id-gateway** (this repo) | EIP-3668 CCIP-Read gateway |
 
 ---
 
@@ -224,8 +212,8 @@ Supported wallets: MetaMask, Trust Wallet, Rainbow, Uniswap Wallet, and any ENS-
 
 ## 📞 Contact
 
-**Website:** [rwa-id.com](https://rwa-id.com)  
-**Email:** [partner@rwa-id.com](mailto:partner@rwa-id.com)  
+**Website:** [rwa-id.com](https://rwa-id.com)
+**Email:** [partner@rwa-id.com](mailto:partner@rwa-id.com)
 **Founder:** Hector Morel
 
 ---
